@@ -12,6 +12,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from utils.debug import debug_print, is_debug_enabled
+from utils.hosts import get_browser_host_resolver_args
 from utils.popups import dismiss_popups, setup_popup_guard
 from utils.proxy import get_playwright_proxy
 
@@ -210,6 +211,11 @@ async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: boo
 	}
 	if settings.humanize:
 		launch_kwargs['human_preset'] = 'careful'
+
+	host_resolver_args = get_browser_host_resolver_args()
+	if host_resolver_args:
+		launch_kwargs['args'] = host_resolver_args
+		print(f'[INFO] Browser host overrides applied: {host_resolver_args[0]}')
 
 	proxy = get_playwright_proxy(use_proxy=use_proxy)
 	if proxy:

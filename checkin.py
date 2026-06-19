@@ -35,6 +35,7 @@ from utils.browser import (
 )
 from utils.config import AccountConfig, AppConfig, load_accounts_config
 from utils.debug import debug_print, is_debug_enabled
+from utils.hosts import get_browser_host_resolver_args
 from utils.notify import notify
 from utils.proxy import get_playwright_proxy, get_proxy_server
 
@@ -98,6 +99,10 @@ async def get_waf_cookies_with_browser(
 	print(f'[PROCESSING] {account_name}: Starting browser to get WAF cookies...')
 
 	launch_kwargs: dict = {'headless': True}
+	host_resolver_args = get_browser_host_resolver_args()
+	if host_resolver_args:
+		launch_kwargs['args'] = host_resolver_args
+		print(f'[INFO] {account_name}: Browser host overrides applied: {host_resolver_args[0]}')
 	proxy = get_playwright_proxy(use_proxy=use_proxy)
 	if proxy:
 		launch_kwargs['proxy'] = proxy

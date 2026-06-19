@@ -88,12 +88,26 @@ jobs:
         PROXY_REQUIRED: false
       run: bash scripts/setup_mihomo_proxy.sh
 
+    - name: 配置自定义 Hosts（anyrouter.top 域名过期临时方案）
+      env:
+        # 可在仓库/环境 Variables 中设置 HOSTS_OVERRIDE 覆盖默认 IP（无需改代码）
+        HOSTS_OVERRIDE: ${{ vars.HOSTS_OVERRIDE || '47.246.23.200 anyrouter.top' }}
+      run: |
+        echo "$HOSTS_OVERRIDE" | tr ';' '\n' | while IFS= read -r line; do
+          entry="$(echo "$line" | xargs)"
+          [ -z "$entry" ] && continue
+          echo "$entry" | sudo tee -a /etc/hosts
+        done
+        echo "✅ 已写入自定义 hosts，当前 anyrouter.top 解析："
+        getent hosts anyrouter.top || true
+
     - name: 执行签到
       env:
         DEBUG_MODE: ${{ env.DEBUG_MODE }}
         CHECKIN_HEADLESS: false
         CHECKIN_HUMANIZE: true
         CHECKIN_WAIT_TIMEOUT_MS: 120000
+        CHECKIN_HOST_OVERRIDES: ${{ vars.HOSTS_OVERRIDE || '47.246.23.200 anyrouter.top' }}
         ANYROUTER_ACCOUNTS: ${{ secrets.ANYROUTER_ACCOUNTS }}
         PROVIDERS: ${{ secrets.PROVIDERS }}
         DINGDING_WEBHOOK: ${{ secrets.DINGDING_WEBHOOK }}

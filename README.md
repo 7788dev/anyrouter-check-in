@@ -287,6 +287,29 @@ PROVIDERS={"agentrouter":{"use_proxy":true}}
 
 如果使用订阅脚本，默认会用 `https://www.google.com/generate_204` 测试代理连通性；也可以通过 `PROXY_TEST_URL` 覆盖。
 
+## 域名过期 / DNS 失效处理（自定义 Host）
+
+当 `anyrouter.top` 域名到期、官方尚未续费时，公共 DNS 可能解析失败或指向停放页面，但源站服务器通常仍在线（可通过直连 IP + 有效 TLS 证书访问）。此时可以把域名固定解析到可用 IP，效果等同于在系统 hosts 文件中写入一条记录。
+
+本仓库的 workflow 已内置处理：
+
+- 会在执行签到前向 GitHub Actions Runner 的 `/etc/hosts` 写入映射（httpx 走系统解析即可生效）；
+- 同时通过 `CHECKIN_HOST_OVERRIDES` 环境变量给 CloakBrowser 内核注入 `--host-resolver-rules`，保证浏览器与 HTTP 客户端走相同解析（双重兜底）。
+
+**默认值**为 `47.246.23.200 anyrouter.top`。如果 IP 变化，无需改代码，只需在仓库 Settings -> Secrets and variables -> Actions -> **Variables**（或 `production` 环境的 Variables）中新增变量覆盖：
+
+- Name: `HOSTS_OVERRIDE`
+- Value: `新的IP anyrouter.top`（多条记录用英文分号 `;` 分隔，例如 `1.2.3.4 anyrouter.top; 5.6.7.8 example.com`）
+
+**本地运行**时：
+
+- 在系统 hosts 文件写入同样记录即可（`httpx` 与浏览器都会读取系统 hosts）：
+  - Windows：`C:\Windows\System32\drivers\etc\hosts`
+  - Linux/macOS：`/etc/hosts`
+- 或在 `.env` 中设置 `CHECKIN_HOST_OVERRIDES=47.246.23.200 anyrouter.top`（仅对浏览器内核的 `--host-resolver-rules` 生效；httpx 仍依赖系统 hosts）。
+
+> 域名恢复正常解析后，把 workflow 中“配置自定义 Hosts”步骤与 `CHECKIN_HOST_OVERRIDES` 环境变量删除（或将其默认值清空）即可恢复默认行为；仅删除 `HOSTS_OVERRIDE` 变量会回退到内置默认值，不会关闭该功能。
+
 ## 开启通知
 
 脚本支持多种通知方式，可以通过配置以下环境变量开启，如果 `webhook` 有要求安全设置，例如钉钉，可以在新建机器人时选择自定义关键词，填写 `AnyRouter`。
