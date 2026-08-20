@@ -230,6 +230,35 @@ def load_accounts_config() -> list[AccountConfig] | None:
 
 			accounts.append(AccountConfig.from_dict(account_dict, i))
 
+		# AgentRouter 可单独使用一个 Secret，避免更新它时覆盖现有 AnyRouter 账号。
+		agentrouter_override = os.getenv('AGENTROUTER_ACCOUNT', '').strip()
+		if agentrouter_override:
+			try:
+				override_data = json.loads(agentrouter_override)
+			except json.JSONDecodeError as e:
+				print(f'ERROR: AGENTROUTER_ACCOUNT JSON 解析失败: {e}')
+				return None
+
+			if not isinstance(override_data, dict):
+				print('ERROR: AGENTROUTER_ACCOUNT must be a JSON object')
+				return None
+			override_data.setdefault('provider', 'agentrouter')
+			override_data.setdefault('name', 'AgentRouter')
+			if override_data['provider'] != 'agentrouter':
+				print('ERROR: AGENTROUTER_ACCOUNT provider must be agentrouter')
+				return None
+
+			has_cookies = bool(override_data.get('cookies'))
+			has_login = bool(override_data.get('email') and override_data.get('password'))
+			if ('api_user' not in override_data and not has_login) or (not has_cookies and not has_login):
+				print('ERROR: AGENTROUTER_ACCOUNT must contain cookies+api_user or email+password')
+				return None
+
+			override_account = AccountConfig.from_dict(override_data, len(accounts))
+			accounts = [account for account in accounts if account.provider != 'agentrouter']
+			accounts.append(override_account)
+			print('[INFO] Applied AGENTROUTER_ACCOUNT override')
+
 		return accounts
 	except Exception as e:
 		print(f'ERROR: Account configuration format is incorrect: {e}')

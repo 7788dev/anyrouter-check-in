@@ -58,6 +58,14 @@
    - Name: `ANYROUTER_ACCOUNTS`
    - Value: 你的多账号配置数据
 
+如果只需要更新 AgentRouter 的 session/API 用户，而不想覆盖已有的 AnyRouter 账号，可额外创建 `AGENTROUTER_ACCOUNT` secret。它是一个 JSON 对象，设置后会替换 `ANYROUTER_ACCOUNTS` 中已有的 AgentRouter 账号：
+
+```json
+{"provider":"agentrouter","cookies":{"session":"你的 session"},"api_user":"你的 new-api-user"}
+```
+
+代理池是仓库公开文件，不需要配置代理环境变量；`AGENTROUTER_ACCOUNT` 仅用于保存账号凭据，仍应作为 GitHub Environment Secret 保存。
+
 ### 4. 多账号配置格式
 
 支持单个与多个账号配置，可选 `name` 和 `provider` 字段：
