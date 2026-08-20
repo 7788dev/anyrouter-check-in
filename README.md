@@ -265,6 +265,7 @@
   - `sign_in_path: null`（查询用户信息时自动签到）
   - `domain: "https://ps.air-outer.com"`
   - `use_proxy: false`
+  - 查询即签到请求在 CloakBrowser 上下文内完成，避免 `acw_tc` 与独立 HTTP 客户端指纹不匹配
 
 **重要提示**：
 

@@ -42,6 +42,21 @@ load_dotenv()
 
 BALANCE_HASH_FILE = 'balance_hash.txt'
 
+_BROWSER_USER_INFO_FETCH_JS = """async ({ url, apiUserKey, apiUser }) => {
+	const headers = { Accept: 'application/json, text/plain, */*' };
+	if (apiUser) headers[apiUserKey] = apiUser;
+	const response = await fetch(url, {
+		method: 'GET',
+		credentials: 'include',
+		headers,
+	});
+	return {
+		status: response.status,
+		contentType: response.headers.get('content-type'),
+		text: await response.text(),
+	};
+}"""
+
 
 def load_balance_hash():
 	"""加载余额hash"""
@@ -234,26 +249,153 @@ async def login_with_credentials(
 		return None
 
 
+def parse_user_info_response(
+	status_code: int,
+	response_text: str,
+	content_type: str | None = None,
+	body_size: int | None = None,
+) -> dict:
+	"""解析用户信息响应，并为 WAF HTML 响应保留可诊断信息。"""
+	content_type = content_type or 'unknown'
+	body_size = body_size if body_size is not None else len(response_text.encode('utf-8'))
+
+	try:
+		data = json.loads(response_text)
+	except (json.JSONDecodeError, TypeError):
+		return {
+			'success': False,
+			'error': (
+				f'Failed to get user info: HTTP {status_code} returned non-JSON response '
+				f'(content-type={content_type}, body={body_size} bytes)'
+			),
+		}
+
+	if not isinstance(data, dict):
+		return {
+			'success': False,
+			'error': f'Failed to get user info: HTTP {status_code} returned unexpected JSON payload',
+		}
+
+	if status_code == 200 and data.get('success'):
+		user_data = data.get('data', {})
+		if not isinstance(user_data, dict):
+			return {'success': False, 'error': 'Failed to get user info: response data is invalid'}
+		quota = round((user_data.get('quota') or 0) / 500000, 2)
+		used_quota = round((user_data.get('used_quota') or 0) / 500000, 2)
+		return {
+			'success': True,
+			'quota': quota,
+			'used_quota': used_quota,
+			'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
+		}
+
+	message = data.get('message') or data.get('msg')
+	error = f'Failed to get user info: HTTP {status_code}'
+	if message:
+		error += f' - {message}'
+	return {'success': False, 'error': error}
+
+
 def get_user_info(client, headers, user_info_url: str):
 	"""获取用户信息"""
 	try:
 		response = client.get(user_info_url, headers=headers, timeout=30)
-
-		if response.status_code == 200:
-			data = response.json()
-			if data.get('success'):
-				user_data = data.get('data', {})
-				quota = round(user_data.get('quota', 0) / 500000, 2)
-				used_quota = round(user_data.get('used_quota', 0) / 500000, 2)
-				return {
-					'success': True,
-					'quota': quota,
-					'used_quota': used_quota,
-					'display': f':money: Current balance: ${quota}, Used: ${used_quota}',
-				}
-		return {'success': False, 'error': f'Failed to get user info: HTTP {response.status_code}'}
+		return parse_user_info_response(
+			response.status_code,
+			response.text,
+			response.headers.get('content-type'),
+			len(response.content),
+		)
 	except Exception as e:
-		return {'success': False, 'error': f'Failed to get user info: {str(e)[:50]}...'}
+		return {'success': False, 'error': f'Failed to get user info: {str(e)[:80]}'}
+
+
+async def run_browser_auto_check_in(
+	all_cookies: dict,
+	account: AccountConfig,
+	account_name: str,
+	provider_config,
+	*,
+	api_user_override: str | None = None,
+) -> tuple[bool, dict | None, dict | None]:
+	"""在真实浏览器上下文中执行查询即签到，避免 WAF Cookie 与 HTTP 指纹不匹配。"""
+	print(f'[PROCESSING] {account_name}: Starting browser-based auto check-in...')
+
+	launch_kwargs: dict = {'headless': True}
+	proxy = get_playwright_proxy(use_proxy=provider_config.use_proxy)
+	if proxy:
+		launch_kwargs['proxy'] = proxy
+		print(f'[INFO] {account_name}: Browser proxy enabled')
+
+	browser = None
+	page = None
+	try:
+		browser = await launch_async(**launch_kwargs)
+		page = await browser.new_page()
+		await prepare_browser_page(page)
+
+		login_url = f'{provider_config.domain}{provider_config.login_path}'
+		print(f'[PROCESSING] {account_name}: Access login page and complete WAF verification...')
+		await page.goto(login_url, wait_until='domcontentloaded', timeout=60_000)
+		await wait_for_waf_ready(page, 60_000)
+
+		waf_cookie_names = set(provider_config.waf_cookie_names or [])
+		user_cookies = [
+			{'name': str(name), 'value': str(value), 'url': provider_config.domain}
+			for name, value in all_cookies.items()
+			if name not in waf_cookie_names and value is not None
+		]
+		if not user_cookies:
+			raise ValueError('No user session cookies available for browser check-in')
+		await page.context.add_cookies(user_cookies)
+
+		api_user = api_user_override or account.api_user
+		user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
+		user_info_results = []
+		for attempt in range(2):
+			print(f'[NETWORK] {account_name}: Fetching user info in browser ({attempt + 1}/2)')
+			response = await page.evaluate(
+				_BROWSER_USER_INFO_FETCH_JS,
+				{
+					'url': user_info_url,
+					'apiUserKey': provider_config.api_user_key,
+					'apiUser': api_user,
+				},
+			)
+			if not isinstance(response, dict):
+				raise TypeError('Browser returned an invalid user info response')
+			response_text = response.get('text')
+			if not isinstance(response_text, str):
+				response_text = ''
+			user_info_results.append(
+				parse_user_info_response(
+					int(response.get('status') or 0),
+					response_text,
+					response.get('contentType'),
+					len(response_text.encode('utf-8')),
+				)
+			)
+			if attempt == 0:
+				await asyncio.sleep(1)
+
+		user_info_before, user_info_after = user_info_results
+		if user_info_before.get('success'):
+			print(user_info_before['display'])
+		if user_info_after.get('success'):
+			print(f'[SUCCESS] {account_name}: Browser-based auto check-in completed')
+			return True, user_info_before, user_info_after
+
+		error = user_info_after.get('error', 'Unknown error')
+		print(f'[FAILED] {account_name}: Browser-based auto check-in failed - {error}')
+		return False, user_info_before, user_info_after
+	except Exception as e:
+		print(f'[FAILED] {account_name}: Browser-based auto check-in error - {str(e)[:120]}')
+		if page is not None:
+			await save_login_screenshot(page, account.provider, account_name, 'browser-auto-check-in-error')
+		return False, None, None
+	finally:
+		if browser is not None:
+			await browser.close()
 
 
 async def prepare_cookies(account_name: str, provider_config, user_cookies: dict) -> dict | None:
@@ -361,6 +503,7 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		return False, None, None
 
 	print(f'[INFO] {account_name}: Using provider "{account.provider}" ({provider_config.domain})')
+	use_browser_auto_check_in = provider_config.needs_waf_cookies() and not provider_config.needs_manual_check_in()
 
 	# 邮箱密码优先
 	all_cookies = None
@@ -388,13 +531,24 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 		if not user_cookies:
 			print(f'[FAILED] {account_name}: Invalid configuration format')
 			return False, None, None
-		all_cookies = await prepare_cookies(account_name, provider_config, user_cookies)
+		if use_browser_auto_check_in:
+			all_cookies = user_cookies
+		else:
+			all_cookies = await prepare_cookies(account_name, provider_config, user_cookies)
 		auth_method = 'session cookies'
 
 	if not all_cookies:
 		return False, None, None
 
 	print(f'[AUTH] {account_name}: Using auth method -> {auth_method}')
+	if use_browser_auto_check_in:
+		return await run_browser_auto_check_in(
+			all_cookies,
+			account,
+			account_name,
+			provider_config,
+			api_user_override=resolved_api_user,
+		)
 
 	return run_check_in_requests(
 		all_cookies,
