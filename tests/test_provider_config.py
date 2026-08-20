@@ -12,13 +12,24 @@ def test_builtin_provider_profile_persistence_defaults(monkeypatch):
 	assert config.providers['agentrouter'].persist_profile is False
 
 
+def test_builtin_agentrouter_uses_direct_air_outer_endpoint(monkeypatch):
+	monkeypatch.delenv('PROVIDERS', raising=False)
+
+	config = AppConfig.load_from_env()
+	provider = config.providers['agentrouter']
+
+	assert provider.domain == 'https://ps.air-outer.com'
+	assert provider.use_proxy is False
+	assert provider.waf_cookie_names == ['acw_tc']
+
+
 def test_provider_profile_persistence_can_override_builtin(monkeypatch):
 	monkeypatch.setenv(
 		'PROVIDERS',
 		json.dumps(
 			{
 				'anyrouter': {'domain': 'https://anyrouter.top', 'persist_profile': False},
-				'agentrouter': {'domain': 'https://agentrouter.org', 'persist_profile': True},
+				'agentrouter': {'domain': 'https://ps.air-outer.com', 'persist_profile': True},
 			}
 		),
 	)

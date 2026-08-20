@@ -263,7 +263,8 @@
 - `agentrouter`：
   - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
   - `sign_in_path: null`（查询用户信息时自动签到）
-  - `use_proxy: true`
+  - `domain: "https://ps.air-outer.com"`
+  - `use_proxy: false`
 
 **重要提示**：
 
@@ -272,7 +273,7 @@
 
 ## 代理配置（可选）
 
-内置的 `agentrouter` 默认 `use_proxy: true`。如果你的运行环境访问该平台不稳定，可以在 GitHub Actions 中配置 mihomo 订阅代理。
+内置的 `agentrouter` 使用 `https://ps.air-outer.com`，默认直接连接（`use_proxy: false`）。如果你的运行环境访问某个平台不稳定，仍可通过自定义 `PROVIDERS` 开启代理，并在 GitHub Actions 中配置 mihomo 订阅。
 
 在仓库 Settings -> Environments -> production -> Environment secrets 中添加：
 
@@ -282,7 +283,7 @@
 
 ```bash
 CHECKIN_PROXY_URL=http://127.0.0.1:7890
-PROVIDERS={"agentrouter":{"use_proxy":true}}
+PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":true}}
 ```
 
 如果使用订阅脚本，默认会用 `https://www.google.com/generate_204` 测试代理连通性；也可以通过 `PROXY_TEST_URL` 覆盖。
@@ -366,7 +367,7 @@ uv run python -m cloakbrowser install
 # 创建 .env 文件并配置（注意：JSON 必须是单行格式）
 # 示例：
 # ANYROUTER_ACCOUNTS=[{"name":"账号1","email":"your@email.com","password":"your_password"}]
-# PROVIDERS={"agentrouter":{"domain":"https://agentrouter.org"}}
+# PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":false}}
 # PROXY_SUBSCRIPTION_URL=https://example.com/sub?token=xxx
 # CHECKIN_PROXY_URL=http://127.0.0.1:7890
 
