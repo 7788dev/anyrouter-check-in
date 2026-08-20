@@ -21,6 +21,8 @@ def test_builtin_agentrouter_uses_direct_air_outer_endpoint(monkeypatch):
 	assert provider.domain == 'https://ps.air-outer.com'
 	assert provider.use_proxy is False
 	assert provider.waf_cookie_names == ['acw_tc']
+	assert provider.needs_waf_cookies() is False
+	assert provider.http_warmup is True
 
 
 def test_provider_profile_persistence_can_override_builtin(monkeypatch):

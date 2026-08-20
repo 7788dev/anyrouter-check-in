@@ -23,6 +23,7 @@ class ProviderConfig:
 	waf_cookie_names: List[str] | None = None
 	use_proxy: bool = False
 	persist_profile: bool = False
+	http_warmup: bool = False
 
 	def __post_init__(self):
 		required_waf_cookies = set()
@@ -50,6 +51,7 @@ class ProviderConfig:
 		"""
 		default_use_proxy = defaults.use_proxy if defaults else False
 		default_persist_profile = defaults.persist_profile if defaults else False
+		default_http_warmup = defaults.http_warmup if defaults else False
 		return cls(
 			name=name,
 			domain=data['domain'],
@@ -61,6 +63,7 @@ class ProviderConfig:
 			waf_cookie_names=data.get('waf_cookie_names', defaults.waf_cookie_names if defaults else None),
 			use_proxy=data.get('use_proxy', default_use_proxy),
 			persist_profile=data.get('persist_profile', default_persist_profile),
+			http_warmup=data.get('http_warmup', default_http_warmup),
 		)
 
 	def needs_waf_cookies(self) -> bool:
@@ -101,10 +104,11 @@ class AppConfig:
 				sign_in_path=None,  # 无需签到接口，查询用户信息时自动完成签到
 				user_info_path='/api/user/self',
 				api_user_key='new-api-user',
-				bypass_method='waf_cookies',
+				bypass_method=None,
 				waf_cookie_names=['acw_tc'],
 				use_proxy=False,
 				persist_profile=False,
+				http_warmup=True,
 			),
 		}
 

@@ -261,11 +261,11 @@
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
 - `agentrouter`：
-  - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
+  - `bypass_method: null`
   - `sign_in_path: null`（查询用户信息时自动签到）
   - `domain: "https://ps.air-outer.com"`
   - `use_proxy: false`
-  - 查询即签到请求在 CloakBrowser 上下文内完成，避免 `acw_tc` 与独立 HTTP 客户端指纹不匹配
+  - `http_warmup: true`（由同一个 HTTP 客户端预热并获取匹配其网络指纹的 `acw_tc`）
 
 **重要提示**：
 
