@@ -1,0 +1,44 @@
+name: 同步 AgentRouter 代理池
+
+on:
+  # Matches TheSpeedX/PROXY-List's published updater schedule (UTC).
+  schedule:
+    - cron: '0 */3 * * *'
+    # Catch an upstream run that starts after our same-minute scheduled run.
+    - cron: '15 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-agentrouter-proxy-pool
+  cancel-in-progress: true
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b
+        with:
+          version: latest
+
+      - name: 安装依赖
+        run: uv sync --frozen
+
+      - name: 拉取并过滤代理
+        run: uv run python -m scripts.update_proxy_pool --path proxy_pool.json
+
+      - name: 提交代理池变更
+        run: |
+          if git diff --quiet -- proxy_pool.json; then
+            echo "代理源未更新或代理池仍有效，无需提交"
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add proxy_pool.json
+          git commit -m "chore: refresh AgentRouter proxy pool"
+          git push origin HEAD:main

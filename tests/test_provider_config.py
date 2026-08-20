@@ -12,14 +12,14 @@ def test_builtin_provider_profile_persistence_defaults(monkeypatch):
 	assert config.providers['agentrouter'].persist_profile is False
 
 
-def test_builtin_agentrouter_uses_direct_air_outer_endpoint(monkeypatch):
+def test_builtin_agentrouter_uses_proxy_pool_for_air_outer_endpoint(monkeypatch):
 	monkeypatch.delenv('PROVIDERS', raising=False)
 
 	config = AppConfig.load_from_env()
 	provider = config.providers['agentrouter']
 
 	assert provider.domain == 'https://ps.air-outer.com'
-	assert provider.use_proxy is False
+	assert provider.use_proxy is True
 	assert provider.waf_cookie_names == ['acw_tc']
 	assert provider.needs_waf_cookies() is False
 	assert provider.http_warmup is True

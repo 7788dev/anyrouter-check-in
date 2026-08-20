@@ -36,7 +36,8 @@ from utils.browser import (
 from utils.config import AccountConfig, AppConfig, load_accounts_config
 from utils.debug import debug_print, is_debug_enabled
 from utils.notify import notify
-from utils.proxy import get_playwright_proxy, get_proxy_server
+from utils.proxy import get_playwright_proxy, get_proxy_candidates
+from utils.proxy_pool import probe_proxy
 
 load_dotenv()
 
@@ -169,7 +170,11 @@ async def login_with_credentials(
 	)
 
 	try:
-		context = await launch_login_context(settings, use_proxy=provider_config.use_proxy)
+		context = await launch_login_context(
+			settings,
+			use_proxy=provider_config.use_proxy,
+			provider_name=provider_name,
+		)
 	except Exception as e:
 		print(f'[FAILED] {account_name}: Browser launch failed: {e}')
 		return None
@@ -478,7 +483,30 @@ async def check_in_account(account: AccountConfig, account_index: int, app_confi
 	)
 
 
-def run_check_in_requests(
+def _is_retryable_proxy_failure(result: tuple[bool, dict | None, dict | None]) -> bool:
+	if result[0]:
+		return False
+	responses = (result[2], result[1])
+	for response in responses:
+		if not response:
+			continue
+		error = str(response.get('error', ''))
+		if any(
+			marker in error
+			for marker in (
+				'non-JSON response',
+				'HTTP 407',
+				'HTTP 429',
+				'HTTP 5',
+				'Error occurred during check-in',
+				'Timed out',
+			)
+		):
+			return True
+	return result[1] is None and result[2] is None
+
+
+def _run_check_in_requests_once(
 	all_cookies: dict,
 	account: AccountConfig,
 	account_name: str,
@@ -486,11 +514,10 @@ def run_check_in_requests(
 	*,
 	api_user_override: str | None = None,
 	use_proxy: bool = False,
+	proxy_url: str | None = None,
 ) -> tuple[bool, dict | None, dict | None]:
-	"""执行 HTTP 签到请求（同步，避免在 async 上下文中使用阻塞 httpx）。"""
 	try:
 		client_kwargs: dict = {'http2': True, 'timeout': 30.0, 'follow_redirects': True}
-		proxy_url = get_proxy_server(use_proxy=use_proxy)
 		if proxy_url:
 			client_kwargs['proxy'] = proxy_url
 			if is_debug_enabled():
@@ -498,7 +525,7 @@ def run_check_in_requests(
 			else:
 				print(f'[INFO] {account_name}: HTTP client proxy enabled')
 		elif use_proxy:
-			print(f'[WARN] {account_name}: Provider requires proxy but CHECKIN_PROXY_URL is not set')
+			print(f'[WARN] {account_name}: Provider requires proxy but no usable proxy pool entry is available')
 
 		with httpx.Client(**client_kwargs) as client:
 			headers = {
@@ -543,8 +570,62 @@ def run_check_in_requests(
 			return False, user_info_before, user_info_after
 
 	except Exception as e:
-		print(f'[FAILED] {account_name}: Error occurred during check-in process - {str(e)[:50]}...')
+		print(f'[FAILED] {account_name}: Error occurred during check-in process - {str(e)[:80]}...')
 		return False, None, None
+
+
+def run_check_in_requests(
+	all_cookies: dict,
+	account: AccountConfig,
+	account_name: str,
+	provider_config,
+	*,
+	api_user_override: str | None = None,
+	use_proxy: bool = False,
+) -> tuple[bool, dict | None, dict | None]:
+	"""Execute HTTP check-in and rotate through the AgentRouter proxy pool on failure."""
+	proxy_candidates = get_proxy_candidates(
+		use_proxy=use_proxy,
+		provider_name=getattr(provider_config, 'name', None),
+	)
+	explicit_proxy = os.getenv('CHECKIN_PROXY_URL', '').strip()
+	pool_rotation = (
+		getattr(provider_config, 'name', None) == 'agentrouter'
+		and use_proxy
+		and not explicit_proxy
+		and any(proxy_candidates)
+	)
+	if getattr(provider_config, 'name', None) == 'agentrouter' and use_proxy and not proxy_candidates:
+		error = {'success': False, 'error': 'AgentRouter proxy pool is empty or expired'}
+		print(f'[FAILED] {account_name}: {error["error"]}')
+		return False, error, error
+	last_result: tuple[bool, dict | None, dict | None] = (False, None, None)
+	max_attempts = min(len(proxy_candidates), 8)
+	user_info_url = f'{provider_config.domain}{provider_config.user_info_path}'
+
+	for index, proxy_url in enumerate(proxy_candidates[:max_attempts], start=1):
+		if pool_rotation:
+			print(f'[PROCESSING] {account_name}: Trying proxy pool entry {index}/{max_attempts}')
+			if not probe_proxy(proxy_url, target_url=user_info_url):
+				print(f'[WARN] {account_name}: Proxy pool entry {index} failed no-cookie health check, rotating')
+				continue
+
+		last_result = _run_check_in_requests_once(
+			all_cookies,
+			account,
+			account_name,
+			provider_config,
+			api_user_override=api_user_override,
+			use_proxy=use_proxy,
+			proxy_url=proxy_url,
+		)
+		if last_result[0] or not pool_rotation or not _is_retryable_proxy_failure(last_result):
+			return last_result
+		print(f'[WARN] {account_name}: Proxy request failed, rotating to the next pool entry')
+
+	if pool_rotation:
+		print(f'[FAILED] {account_name}: All attempted AgentRouter proxy pool entries failed')
+	return last_result
 
 
 async def main():
@@ -555,7 +636,7 @@ async def main():
 		if proxy_server:
 			print(f'[INFO] Proxy endpoint available: {proxy_server} (enabled per provider use_proxy)')
 		else:
-			print('[INFO] CHECKIN_PROXY_URL not set; providers with use_proxy=true will run without proxy')
+			print('[INFO] CHECKIN_PROXY_URL not set; AgentRouter will use the repository proxy pool')
 	else:
 		print('[INFO] Debug mode disabled (set DEBUG_MODE=true to enable screenshots and verbose logs)')
 

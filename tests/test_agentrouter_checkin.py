@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 
 import checkin
+from utils.config import AccountConfig, ProviderConfig
 
 
 def test_parse_user_info_response_reports_waf_html():
@@ -117,3 +118,96 @@ def test_http_warmup_can_be_disabled():
 
 	provider = SimpleNamespace(http_warmup=False)
 	checkin.warm_up_http_session(UnexpectedClient(), 'Account 1', provider, {})
+
+
+def test_agentrouter_rotates_to_next_proxy_after_waf_response(monkeypatch):
+	account = AccountConfig(cookies={'session': 'value'}, api_user='1', provider='agentrouter')
+	provider = ProviderConfig(
+		name='agentrouter',
+		domain='https://ps.air-outer.com',
+		sign_in_path=None,
+		use_proxy=True,
+	)
+	proxy_calls = []
+
+	monkeypatch.setattr(
+		checkin,
+		'get_proxy_candidates',
+		lambda **kwargs: ['http://8.8.8.8:80', 'http://9.9.9.9:80'],
+	)
+	monkeypatch.setattr(checkin, 'probe_proxy', lambda *args, **kwargs: True)
+
+	def fake_run_once(*args, proxy_url=None, **kwargs):
+		proxy_calls.append(proxy_url)
+		if len(proxy_calls) == 1:
+			failure = {'success': False, 'error': 'HTTP 200 returned non-JSON response'}
+			return False, failure, failure
+		success = {'success': True}
+		return True, success, success
+
+	monkeypatch.setattr(checkin, '_run_check_in_requests_once', fake_run_once)
+
+	result = checkin.run_check_in_requests(
+		{'session': 'value'},
+		account,
+		'Account 2',
+		provider,
+		use_proxy=True,
+	)
+
+	assert result[0] is True
+	assert proxy_calls == ['http://8.8.8.8:80', 'http://9.9.9.9:80']
+
+
+def test_agentrouter_skips_proxy_that_fails_no_cookie_health_check(monkeypatch):
+	account = AccountConfig(cookies={'session': 'value'}, api_user='1', provider='agentrouter')
+	provider = ProviderConfig(
+		name='agentrouter',
+		domain='https://ps.air-outer.com',
+		sign_in_path=None,
+		use_proxy=True,
+	)
+	used_proxies = []
+
+	monkeypatch.setattr(
+		checkin,
+		'get_proxy_candidates',
+		lambda **kwargs: ['http://8.8.8.8:80', 'http://9.9.9.9:80'],
+	)
+	monkeypatch.setattr(checkin, 'probe_proxy', lambda proxy, **kwargs: proxy.endswith('9.9.9.9:80'))
+	monkeypatch.setattr(
+		checkin,
+		'_run_check_in_requests_once',
+		lambda *args, proxy_url=None, **kwargs: (
+			used_proxies.append(proxy_url) or True,
+			{'success': True},
+			{'success': True},
+		),
+	)
+
+	result = checkin.run_check_in_requests(
+		{'session': 'value'},
+		account,
+		'Account 2',
+		provider,
+		use_proxy=True,
+	)
+
+	assert result[0] is True
+	assert used_proxies == ['http://9.9.9.9:80']
+
+
+def test_agentrouter_fails_closed_when_proxy_pool_is_empty(monkeypatch):
+	account = AccountConfig(cookies={'session': 'value'}, api_user='1', provider='agentrouter')
+	provider = ProviderConfig(
+		name='agentrouter',
+		domain='https://ps.air-outer.com',
+		sign_in_path=None,
+		use_proxy=True,
+	)
+	monkeypatch.setattr(checkin, 'get_proxy_candidates', lambda **kwargs: [])
+
+	result = checkin.run_check_in_requests({'session': 'value'}, account, 'Account 2', provider, use_proxy=True)
+
+	assert result[0] is False
+	assert 'proxy pool is empty' in result[1]['error']

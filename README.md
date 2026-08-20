@@ -264,8 +264,9 @@
   - `bypass_method: null`
   - `sign_in_path: null`（查询用户信息时自动签到）
   - `domain: "https://ps.air-outer.com"`
-  - `use_proxy: false`
+  - `use_proxy: true`
   - `http_warmup: true`（由同一个 HTTP 客户端预热并获取匹配其网络指纹的 `acw_tc`）
+  - 默认从仓库根目录的 `proxy_pool.json` 随机选择已验证的公开代理；不可用时自动轮换
 
 **重要提示**：
 
@@ -274,7 +275,17 @@
 
 ## 代理配置（可选）
 
-内置的 `agentrouter` 使用 `https://ps.air-outer.com`，默认直接连接（`use_proxy: false`）。如果你的运行环境访问某个平台不稳定，仍可通过自定义 `PROVIDERS` 开启代理，并在 GitHub Actions 中配置 mihomo 订阅。
+内置的 `agentrouter` 使用 `https://ps.air-outer.com` 并默认启用仓库代理池。`.github/workflows/update_proxy_pool.yml` 使用与 `TheSpeedX/PROXY-List` 公布的 `0 */3 * * *`（UTC）相同的同步时刻，并在 15 分钟后补查一次；仅当上游内容哈希变化或当前代理池过期时，才重新过滤并提交 `proxy_pool.json`。由于第三方仓库无法主动触发本仓库，GitHub 调度可能存在少量延迟。
+
+代理池默认有效期为 36 小时。每次签到会随机打乱池内代理，先发送不含账号 Cookie 的健康检查；选中的代理若连接失败、返回 WAF HTML 或服务端错误，会自动切换到下一条，单次最多尝试 8 条。
+
+当前同步源：
+
+- `TheSpeedX/PROXY-List`
+- `monosans/proxy-list`
+- `proxifly/free-proxy-list`
+
+仅接受公网 IPv4 的 HTTP/HTTPS 代理，并保持 HTTPS 证书验证开启。公开代理不保证长期稳定；如需更高可靠性，仍可使用下面的 mihomo 订阅或 `CHECKIN_PROXY_URL` 覆盖仓库代理池。
 
 在仓库 Settings -> Environments -> production -> Environment secrets 中添加：
 
@@ -368,7 +379,7 @@ uv run python -m cloakbrowser install
 # 创建 .env 文件并配置（注意：JSON 必须是单行格式）
 # 示例：
 # ANYROUTER_ACCOUNTS=[{"name":"账号1","email":"your@email.com","password":"your_password"}]
-# PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":false}}
+# PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":true}}
 # PROXY_SUBSCRIPTION_URL=https://example.com/sub?token=xxx
 # CHECKIN_PROXY_URL=http://127.0.0.1:7890
 

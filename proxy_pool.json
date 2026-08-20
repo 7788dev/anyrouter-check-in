@@ -1,0 +1,37 @@
+{
+  "expires_at": "2026-08-22T08:54:58.162798Z",
+  "generated_at": "2026-08-20T20:54:58.162798Z",
+  "proxies": [
+    "http://101.206.186.99:8080",
+    "http://112.64.135.45:8080",
+    "http://114.94.148.37:18080",
+    "http://120.232.115.170:17981",
+    "http://122.246.4.6:17981",
+    "http://27.155.93.29:1080",
+    "http://27.185.218.213:17981"
+  ],
+  "schema_version": 1,
+  "source_metadata": {
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt": {
+      "etag": "W/\"8fc574e7706b5d89fb955e4f5fcdcefef980b0cdbb01012c64e1396fa8e1d9f5\"",
+      "last_modified": "",
+      "sha256": "5c1e9f0943c49eb29354ce351370c951976b88aa12858def8f17918adf6da193"
+    },
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt": {
+      "etag": "W/\"8e19ea398481ff72334d4aa0434e72cd53a56f216b98b6df27d32125d8129661\"",
+      "last_modified": "",
+      "sha256": "5dd13ddb06f13f0debdb3256f988429c7c7b773d77ad5e93acd01e735a15c744"
+    },
+    "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt": {
+      "etag": "W/\"97b8436937ef2d8caabc7e2b7bc89e3be97ac18b6ab5f013986c44363985d5c1\"",
+      "last_modified": "",
+      "sha256": "60fe9d558bc3ffe5d903730c651d9573bdc2a3d14adcfbc3646e269f0c05726e"
+    }
+  },
+  "source_revisions": {
+    "https://raw.githubusercontent.com/TheSpeedX/PROXY-List/master/http.txt": "5c1e9f0943c49eb29354ce351370c951976b88aa12858def8f17918adf6da193",
+    "https://raw.githubusercontent.com/monosans/proxy-list/main/proxies/http.txt": "5dd13ddb06f13f0debdb3256f988429c7c7b773d77ad5e93acd01e735a15c744",
+    "https://raw.githubusercontent.com/proxifly/free-proxy-list/main/proxies/all/data.txt": "60fe9d558bc3ffe5d903730c651d9573bdc2a3d14adcfbc3646e269f0c05726e"
+  },
+  "target_url": "https://ps.air-outer.com/api/user/self"
+}
