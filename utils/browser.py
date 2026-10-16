@@ -200,12 +200,7 @@ class _EphemeralBrowserContext:
 			await self._browser.close()
 
 
-async def launch_login_context(
-	settings: BrowserLoginSettings,
-	*,
-	use_proxy: bool = False,
-	provider_name: str | None = None,
-) -> BrowserContext:
+async def launch_login_context(settings: BrowserLoginSettings, *, use_proxy: bool = False) -> BrowserContext:
 	_ensure_binary_path(settings)
 
 	launch_kwargs: dict = {
@@ -216,7 +211,7 @@ async def launch_login_context(
 	if settings.humanize:
 		launch_kwargs['human_preset'] = 'careful'
 
-	proxy = get_playwright_proxy(use_proxy=use_proxy, provider_name=provider_name)
+	proxy = get_playwright_proxy(use_proxy=use_proxy)
 	if proxy:
 		launch_kwargs['proxy'] = proxy
 		if is_debug_enabled():

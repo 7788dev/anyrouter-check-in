@@ -23,7 +23,6 @@ class ProviderConfig:
 	waf_cookie_names: List[str] | None = None
 	use_proxy: bool = False
 	persist_profile: bool = False
-	http_warmup: bool = False
 
 	def __post_init__(self):
 		required_waf_cookies = set()
@@ -51,7 +50,6 @@ class ProviderConfig:
 		"""
 		default_use_proxy = defaults.use_proxy if defaults else False
 		default_persist_profile = defaults.persist_profile if defaults else False
-		default_http_warmup = defaults.http_warmup if defaults else False
 		return cls(
 			name=name,
 			domain=data['domain'],
@@ -63,7 +61,6 @@ class ProviderConfig:
 			waf_cookie_names=data.get('waf_cookie_names', defaults.waf_cookie_names if defaults else None),
 			use_proxy=data.get('use_proxy', default_use_proxy),
 			persist_profile=data.get('persist_profile', default_persist_profile),
-			http_warmup=data.get('http_warmup', default_http_warmup),
 		)
 
 	def needs_waf_cookies(self) -> bool:
@@ -99,16 +96,15 @@ class AppConfig:
 			),
 			'agentrouter': ProviderConfig(
 				name='agentrouter',
-				domain='https://ps.air-outer.com',
+				domain='https://agentrouter.org',
 				login_path='/login',
 				sign_in_path=None,  # 无需签到接口，查询用户信息时自动完成签到
 				user_info_path='/api/user/self',
 				api_user_key='new-api-user',
-				bypass_method=None,
+				bypass_method='waf_cookies',
 				waf_cookie_names=['acw_tc'],
 				use_proxy=True,
 				persist_profile=False,
-				http_warmup=True,
 			),
 		}
 
@@ -229,35 +225,6 @@ def load_accounts_config() -> list[AccountConfig] | None:
 				return None
 
 			accounts.append(AccountConfig.from_dict(account_dict, i))
-
-		# AgentRouter 可单独使用一个 Secret，避免更新它时覆盖现有 AnyRouter 账号。
-		agentrouter_override = os.getenv('AGENTROUTER_ACCOUNT', '').strip()
-		if agentrouter_override:
-			try:
-				override_data = json.loads(agentrouter_override)
-			except json.JSONDecodeError as e:
-				print(f'ERROR: AGENTROUTER_ACCOUNT JSON 解析失败: {e}')
-				return None
-
-			if not isinstance(override_data, dict):
-				print('ERROR: AGENTROUTER_ACCOUNT must be a JSON object')
-				return None
-			override_data.setdefault('provider', 'agentrouter')
-			override_data.setdefault('name', 'AgentRouter')
-			if override_data['provider'] != 'agentrouter':
-				print('ERROR: AGENTROUTER_ACCOUNT provider must be agentrouter')
-				return None
-
-			has_cookies = bool(override_data.get('cookies'))
-			has_login = bool(override_data.get('email') and override_data.get('password'))
-			if ('api_user' not in override_data and not has_login) or (not has_cookies and not has_login):
-				print('ERROR: AGENTROUTER_ACCOUNT must contain cookies+api_user or email+password')
-				return None
-
-			override_account = AccountConfig.from_dict(override_data, len(accounts))
-			accounts = [account for account in accounts if account.provider != 'agentrouter']
-			accounts.append(override_account)
-			print('[INFO] Applied AGENTROUTER_ACCOUNT override')
 
 		return accounts
 	except Exception as e:

@@ -58,14 +58,6 @@
    - Name: `ANYROUTER_ACCOUNTS`
    - Value: 你的多账号配置数据
 
-如果只需要更新 AgentRouter 的 session/API 用户，而不想覆盖已有的 AnyRouter 账号，可额外创建 `AGENTROUTER_ACCOUNT` secret。它是一个 JSON 对象，设置后会替换 `ANYROUTER_ACCOUNTS` 中已有的 AgentRouter 账号：
-
-```json
-{"provider":"agentrouter","cookies":{"session":"你的 session"},"api_user":"你的 new-api-user"}
-```
-
-代理池是仓库公开文件，不需要配置代理环境变量；`AGENTROUTER_ACCOUNT` 仅用于保存账号凭据，仍应作为 GitHub Environment Secret 保存。
-
 ### 4. 多账号配置格式
 
 支持单个与多个账号配置，可选 `name` 和 `provider` 字段：
@@ -131,7 +123,6 @@
 
 - 脚本每 6 小时执行一次（1. action 无法准确触发，基本延时 1~1.5h；2. 目前观测到 anyrouter 的签到是每 24h 而不是零点就可签到）
 - 你也可以随时手动触发签到
-- GitHub 调度可能长时间不触发，此时修改并提交一次任意文件即可重新注册调度事件
 
 ## 注意事项
 
@@ -270,12 +261,9 @@
   - `bypass_method: "waf_cookies"`（需要先获取 WAF cookies，然后执行签到）
   - `sign_in_path: "/api/user/sign_in"`
 - `agentrouter`：
-  - `bypass_method: null`
+  - `bypass_method: "waf_cookies"`（需要获取 `acw_tc`）
   - `sign_in_path: null`（查询用户信息时自动签到）
-  - `domain: "https://ps.air-outer.com"`
   - `use_proxy: true`
-  - `http_warmup: true`（由同一个 HTTP 客户端预热并获取匹配其网络指纹的 `acw_tc`）
-  - 默认从仓库根目录的 `proxy_pool.json` 随机选择已验证的公开代理；不可用时自动轮换
 
 **重要提示**：
 
@@ -284,17 +272,7 @@
 
 ## 代理配置（可选）
 
-内置的 `agentrouter` 使用 `https://ps.air-outer.com` 并默认启用仓库代理池。`.github/workflows/update_proxy_pool.yml` 使用与 `TheSpeedX/PROXY-List` 公布的 `0 */3 * * *`（UTC）相同的同步时刻，并在 15 分钟后补查一次；仅当上游内容哈希变化或当前代理池过期时，才重新过滤并提交 `proxy_pool.json`。由于第三方仓库无法主动触发本仓库，GitHub 调度可能存在少量延迟。
-
-代理池默认有效期为 36 小时。每次签到会随机打乱池内代理，先发送不含账号 Cookie 的健康检查；选中的代理若连接失败、返回 WAF HTML 或服务端错误，会自动切换到下一条，单次最多尝试 8 条。
-
-当前同步源：
-
-- `TheSpeedX/PROXY-List`
-- `monosans/proxy-list`
-- `proxifly/free-proxy-list`
-
-仅接受公网 IPv4 的 HTTP/HTTPS 代理，并保持 HTTPS 证书验证开启。公开代理不保证长期稳定；如需更高可靠性，仍可使用下面的 mihomo 订阅或 `CHECKIN_PROXY_URL` 覆盖仓库代理池。
+内置的 `agentrouter` 默认 `use_proxy: true`。如果你的运行环境访问该平台不稳定，可以在 GitHub Actions 中配置 mihomo 订阅代理。
 
 在仓库 Settings -> Environments -> production -> Environment secrets 中添加：
 
@@ -304,7 +282,7 @@
 
 ```bash
 CHECKIN_PROXY_URL=http://127.0.0.1:7890
-PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":true}}
+PROVIDERS={"agentrouter":{"use_proxy":true}}
 ```
 
 如果使用订阅脚本，默认会用 `https://www.google.com/generate_204` 测试代理连通性；也可以通过 `PROXY_TEST_URL` 覆盖。
@@ -388,7 +366,7 @@ uv run python -m cloakbrowser install
 # 创建 .env 文件并配置（注意：JSON 必须是单行格式）
 # 示例：
 # ANYROUTER_ACCOUNTS=[{"name":"账号1","email":"your@email.com","password":"your_password"}]
-# PROVIDERS={"agentrouter":{"domain":"https://ps.air-outer.com","use_proxy":true}}
+# PROVIDERS={"agentrouter":{"domain":"https://agentrouter.org"}}
 # PROXY_SUBSCRIPTION_URL=https://example.com/sub?token=xxx
 # CHECKIN_PROXY_URL=http://127.0.0.1:7890
 
