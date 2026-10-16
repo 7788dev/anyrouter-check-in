@@ -3,9 +3,9 @@ name: 同步 AgentRouter 代理池
 on:
   # Matches TheSpeedX/PROXY-List's published updater schedule (UTC).
   schedule:
-    - cron: '7 */3 * * *'
+    - cron: '0 */3 * * *'
     # Catch an upstream run that starts after our same-minute scheduled run.
-    - cron: '37 */3 * * *'
+    - cron: '15 */3 * * *'
   workflow_dispatch:
 
 permissions:
